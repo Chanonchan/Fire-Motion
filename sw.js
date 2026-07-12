@@ -1,5 +1,5 @@
 // Bump this on every deploy so clients pick up the new app shell.
-const CACHE_NAME = 'meditation-fire-v1';
+const CACHE_NAME = 'meditation-fire-v2';
 const APP_SHELL = [
   './',
   './index.html',

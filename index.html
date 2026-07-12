@@ -622,32 +622,50 @@
     let flickerE = 0;                 // energy of the current flicker event
     let nextFlicker = 4;              // seconds until the next one
 
+    // iPhone Safari and many phone WebViews ignore canvas filter, which
+    // this flame's soft edges depend on — without a fallback the layers
+    // render as hard-edged cutouts instead of glowing gas
+    const filterSupported = (function () {
+      const c = document.createElement('canvas').getContext('2d');
+      if (!c) return false;
+      try { c.filter = 'blur(2px)'; } catch (e) { return false; }
+      return c.filter === 'blur(2px)';
+    })();
+
+    // Fallback blur: draw the flame small, then upscale twice — each
+    // bilinear pass softens the edges much like the missing gaussian blur
+    const SOFT_K = 4;
+    const soft = document.createElement('canvas');
+    const softCtx = soft.getContext('2d');
+    const mid = document.createElement('canvas');
+    const midCtx = mid.getContext('2d');
+
     function reset() {
       flickerE = 0;
       nextFlicker = 4;
     }
 
-    function flamePath(cx, cy, w, h, tipX) {
-      ctx.beginPath();
-      ctx.moveTo(cx - w / 2, cy);
-      ctx.bezierCurveTo(
+    function flamePath(g, cx, cy, w, h, tipX) {
+      g.beginPath();
+      g.moveTo(cx - w / 2, cy);
+      g.bezierCurveTo(
         cx - w / 2, cy - h * 0.55,
         cx + tipX - w * 0.12, cy - h * 0.82,
         cx + tipX, cy - h
       );
-      ctx.bezierCurveTo(
+      g.bezierCurveTo(
         cx + tipX + w * 0.12, cy - h * 0.82,
         cx + w / 2, cy - h * 0.55,
         cx + w / 2, cy
       );
-      ctx.quadraticCurveTo(cx, cy + w * 0.5, cx - w / 2, cy);
-      ctx.closePath();
+      g.quadraticCurveTo(cx, cy + w * 0.5, cx - w / 2, cy);
+      g.closePath();
     }
 
-    function layerGradient(cy, h, stops) {
-      const g = ctx.createLinearGradient(0, cy + 4, 0, cy - h);
-      stops.forEach(function (s) { g.addColorStop(s[0], s[1]); });
-      return g;
+    function layerGradient(g, cy, h, stops) {
+      const grad = g.createLinearGradient(0, cy + 4, 0, cy - h);
+      stops.forEach(function (s) { grad.addColorStop(s[0], s[1]); });
+      return grad;
     }
 
     function step(dt, t) {
@@ -693,37 +711,69 @@
       ctx.arc(baseX, haloY, h * 1.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Soft edges so the layers blend like glowing gas, not cut-out shapes
-      ctx.filter = 'blur(' + (4 * scale) + 'px)';
+      // The three glowing layers of the flame body
+      function paintFlame(g) {
+        // Outer flame — warm orange envelope
+        g.fillStyle = layerGradient(g, baseY, h, [
+          [0, 'rgba(255, 80, 10, 0.32)'],
+          [0.55, 'rgba(255, 140, 30, 0.5)'],
+          [1, 'rgba(255, 180, 60, 0.08)']
+        ]);
+        flamePath(g, baseX, baseY, w, h, tipX);
+        g.fill();
 
-      // Outer flame — warm orange envelope
-      ctx.fillStyle = layerGradient(baseY, h, [
-        [0, 'rgba(255, 80, 10, 0.32)'],
-        [0.55, 'rgba(255, 140, 30, 0.5)'],
-        [1, 'rgba(255, 180, 60, 0.08)']
-      ]);
-      flamePath(baseX, baseY, w, h, tipX);
-      ctx.fill();
+        // Mid flame — bright yellow body
+        g.fillStyle = layerGradient(g, baseY - 4 * scale, h * 0.72, [
+          [0, 'rgba(255, 180, 60, 0.45)'],
+          [0.65, 'rgba(255, 220, 120, 0.75)'],
+          [1, 'rgba(255, 200, 80, 0.15)']
+        ]);
+        flamePath(g, baseX, baseY - 4 * scale, w * 0.64, h * 0.72,
+          tipX * 0.75 + Math.sin(t * 3.1) * 1.2 * scale);
+        g.fill();
 
-      // Mid flame — bright yellow body
-      ctx.fillStyle = layerGradient(baseY - 4 * scale, h * 0.72, [
-        [0, 'rgba(255, 180, 60, 0.45)'],
-        [0.65, 'rgba(255, 220, 120, 0.75)'],
-        [1, 'rgba(255, 200, 80, 0.15)']
-      ]);
-      flamePath(baseX, baseY - 4 * scale, w * 0.64, h * 0.72,
-        tipX * 0.75 + Math.sin(t * 3.1) * 1.2 * scale);
-      ctx.fill();
+        // Core — white-hot, compact: this is what leaves the afterimage
+        g.fillStyle = layerGradient(g, baseY - 8 * scale, h * 0.45, [
+          [0, 'rgba(255, 240, 200, 0.9)'],
+          [1, 'rgba(255, 255, 240, 0.25)']
+        ]);
+        flamePath(g, baseX, baseY - 8 * scale, w * 0.34, h * 0.45, tipX * 0.5);
+        g.fill();
+      }
 
-      // Core — white-hot, compact: this is what leaves the afterimage
-      ctx.fillStyle = layerGradient(baseY - 8 * scale, h * 0.45, [
-        [0, 'rgba(255, 240, 200, 0.9)'],
-        [1, 'rgba(255, 255, 240, 0.25)']
-      ]);
-      flamePath(baseX, baseY - 8 * scale, w * 0.34, h * 0.45, tipX * 0.5);
-      ctx.fill();
-
-      ctx.filter = 'none';
+      if (filterSupported) {
+        // Soft edges so the layers blend like glowing gas, not cut-out shapes
+        ctx.filter = 'blur(' + (4 * scale) + 'px)';
+        paintFlame(ctx);
+        ctx.filter = 'none';
+      } else {
+        // No canvas blur (iPhone Safari): render the flame small and
+        // upscale in two smoothing passes for the same soft edges
+        const rw = 220 * scale;
+        const rh = 260 * scale;
+        const rx = baseX - rw / 2;
+        const ry = baseY - rh + 50 * scale;
+        const sw = Math.max(2, Math.round(rw / SOFT_K));
+        const sh = Math.max(2, Math.round(rh / SOFT_K));
+        if (soft.width !== sw || soft.height !== sh) {
+          soft.width = sw;
+          soft.height = sh;
+          mid.width = sw * 2;
+          mid.height = sh * 2;
+        }
+        softCtx.setTransform(1, 0, 0, 1, 0, 0);
+        softCtx.clearRect(0, 0, sw, sh);
+        softCtx.setTransform(1 / SOFT_K, 0, 0, 1 / SOFT_K, -rx / SOFT_K, -ry / SOFT_K);
+        softCtx.globalCompositeOperation = 'lighter';
+        paintFlame(softCtx);
+        midCtx.clearRect(0, 0, mid.width, mid.height);
+        midCtx.imageSmoothingEnabled = true;
+        midCtx.imageSmoothingQuality = 'high';
+        midCtx.drawImage(soft, 0, 0, mid.width, mid.height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(mid, rx, ry, rw, rh);
+      }
 
       // Faint blue combustion tinge at the base — barely there, the way it
       // reads on a real flame seen in the dark
