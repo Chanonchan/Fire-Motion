@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fire">
+<meta name="description" content="A calm, guided meditation flame for trataka practice.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Meditation Fire</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* tracks the real visible height on phones */
+    transition: opacity 3s ease;
+  }
+
+  #controls {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    transition: opacity 0.6s;
+  }
+
+  #versionSwitch {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    transition: opacity 0.6s;
+  }
+
+  .verBtn {
+    min-width: 38px;
+    height: 38px;
+    padding: 0 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-family: Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  .verBtn:hover { color: rgba(255, 255, 255, 0.8); }
+
+  .verBtn.active {
+    background: rgba(255, 150, 60, 0.18);
+    color: rgba(255, 200, 140, 0.95);
+  }
+
+  .ctrlBtn {
+    min-width: 42px;
+    height: 42px;
+    padding: 0 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-family: Arial, sans-serif;
+    line-height: 1;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  .ctrlBtn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  #status {
+    position: fixed;
+    bottom: 26px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 10;
+    color: rgba(255, 255, 255, 0.35);
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.06em;
+    transition: opacity 0.6s;
+    pointer-events: none;
+  }
+
+  /* Fade the UI out when idle so nothing distracts from the flame */
+  body.idle #controls,
+  body.idle #versionSwitch,
+  body.idle #status { opacity: 0; }
+  body.idle #controls,
+  body.idle #versionSwitch { pointer-events: none; }
+  body.idle { cursor: none; }
+
+  .ctrlBtn svg { width: 20px; height: 20px; }
+
+  /* Phones: comfortable tap targets, tighter layout, safe-area insets */
+  @media (max-width: 600px) {
+    #controls {
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      gap: 6px;
+    }
+    #versionSwitch {
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
+    }
+    .ctrlBtn { min-width: 46px; height: 46px; }
+    .verBtn { min-width: 40px; height: 40px; }
+    #status {
+      font-size: 13px;
+      bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="fire"></canvas>
+
+<div id="versionSwitch" role="group" aria-label="Flame style">
+  <button id="verBtn21" class="verBtn" title="Flame style 2.1 (candle)" aria-label="Flame style 2.1">2.1</button>
+  <button id="verBtn3" class="verBtn" title="Flame style 3 (particles)" aria-label="Flame style 3">3</button>
+</div>
+
+<div id="controls">
+  <button id="sizeDownBtn" class="ctrlBtn" title="Smaller flame" aria-label="Smaller flame">&minus;</button>
+  <button id="sizeUpBtn" class="ctrlBtn" title="Bigger flame" aria-label="Bigger flame">+</button>
+  <button id="brightBtn" class="ctrlBtn" title="Brightness" aria-label="Brightness">&#9728;&#xFE0E;</button>
+  <button id="timerBtn" class="ctrlBtn" title="Guided session: off / 3 / 5 / 10 minutes" aria-label="Guided session">&#9711;</button>
+  <button id="fullscreenBtn" class="ctrlBtn" title="Toggle fullscreen" aria-label="Toggle fullscreen">
+    <svg id="iconExpand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+      <path d="M16 3h3a2 2 0 0 1 2 2v3"/>
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3"/>
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+    </svg>
+    <svg id="iconShrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+      <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+      <path d="M16 3v3a2 2 0 0 0 2 2h3"/>
+      <path d="M8 21v-3a2 2 0 0 0-2-2H3"/>
+      <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+    </svg>
+  </button>
+</div>
+
+<div id="status"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- UI elements ----------
+  const canvas = document.getElementById('fire');
+  const ctx = canvas.getContext('2d');
+
+  // Fire3's particle layer lives on its own off-screen canvas so its motion
+  // trails can accumulate; created lazily since Fire2.1 doesn't need it.
+  const fireLayer = document.createElement('canvas');
+  const fctx = fireLayer.getContext('2d');
+
+  const statusEl = document.getElementById('status');
+  const btnFs = document.getElementById('fullscreenBtn');
+  const btnUp = document.getElementById('sizeUpBtn');
+  const btnDown = document.getElementById('sizeDownBtn');
+  const btnBright = document.getElementById('brightBtn');
+  const btnTimer = document.getElementById('timerBtn');
+  const verBtn21 = document.getElementById('verBtn21');
+  const verBtn3 = document.getElementById('verBtn3');
+  const iconExpand = document.getElementById('iconExpand');
+  const iconShrink = document.getElementById('iconShrink');
+
+  // ---------- Fullscreen ----------
+  btnFs.addEventListener('click', function () {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(function () {});
+    } else {
+      document.exitFullscreen();
+    }
+  });
+  document.addEventListener('fullscreenchange', function () {
+    const fs = !!document.fullscreenElement;
+    iconExpand.style.display = fs ? 'none' : 'block';
+    iconShrink.style.display = fs ? 'block' : 'none';
+  });
+  // iPhone browsers don't allow fullscreen for pages — hide the button there
+  // (use "Add to Home Screen" in Safari for a fullscreen experience instead)
+  if (!document.documentElement.requestFullscreen) {
+    btnFs.style.display = 'none';
+  }
+
+  // ---------- Keep the screen awake during practice ----------
+  let wakeLock = null;
+  function requestWake() {
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function (lock) {
+      wakeLock = lock;
+    }).catch(function () {});
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') requestWake();
+  });
+  requestWake();
+
+  // ---------- Idle fade ----------
+  let idleTimer;
+  function wake() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      document.body.classList.add('idle');
+    }, 3500);
+  }
+  ['mousemove', 'touchstart', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, wake, { passive: true });
+  });
+  wake();
+
+  // ---------- Persisted settings ----------
+  // localStorage is blocked (and throws) when the file is opened straight
+  // from a phone's file manager or a messaging app — never let that stop
+  // the fire from drawing
+  function storeGet(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function storeSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  let userScale = parseFloat(storeGet('fireScale')) || 1;
+  userScale = Math.min(3, Math.max(0.4, userScale));
+
+  const BRIGHT_LEVELS = [1, 0.75, 0.55];
+  let brightIdx = parseInt(storeGet('fireBright'), 10) || 0;
+  if (brightIdx < 0 || brightIdx >= BRIGHT_LEVELS.length) brightIdx = 0;
+
+  function applyBrightness() {
+    canvas.style.filter = 'brightness(' + BRIGHT_LEVELS[brightIdx] + ')';
+  }
+  applyBrightness();
+
+  btnBright.addEventListener('click', function () {
+    brightIdx = (brightIdx + 1) % BRIGHT_LEVELS.length;
+    storeSet('fireBright', brightIdx);
+    applyBrightness();
+  });
+
+  // ---------- Flame style (version) ----------
+  // "2.1" is the calm hand-drawn candle spline; "3" is the particle flame.
+  // Choice is remembered and switchable any time from the top-left control.
+  let version = storeGet('fireVersion');
+  if (version !== '2.1' && version !== '3') version = '3';
+
+  function applyVersionUI() {
+    verBtn21.classList.toggle('active', version === '2.1');
+    verBtn3.classList.toggle('active', version === '3');
+  }
+  applyVersionUI();
+
+  function setVersion(next) {
+    if (next === version) return;
+    version = next;
+    storeSet('fireVersion', version);
+    applyVersionUI();
+    engines[version].reset();
+    resize();
+  }
+  verBtn21.addEventListener('click', function () { setVersion('2.1'); });
+  verBtn3.addEventListener('click', function () { setVersion('3'); });
+
+  // ---------- Layout ----------
+  let W, H, baseX, baseY, scale;
+
+  // Each engine's flame base sits a slightly different distance below
+  // center; resize() defers to the active engine for that offset.
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fireLayer.width = W * dpr;
+    fireLayer.height = H * dpr;
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scale = Math.min(W, H) / 900;
+    if (scale < 0.6) scale = 0.6;   // keep the flame a good size on phones
+    scale *= userScale;
+    baseX = W / 2;
+    baseY = H / 2 + engines[version].baseYOffset * scale;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+  }
+
+  function setUserScale(next) {
+    userScale = Math.min(3, Math.max(0.4, next));
+    storeSet('fireScale', userScale);
+    resize();
+  }
+  btnUp.addEventListener('click', function () { setUserScale(userScale * 1.25); });
+  btnDown.addEventListener('click', function () { setUserScale(userScale / 1.25); });
+
+  // ---------- Soft chimes (Web Audio) ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function bell(delay, dur) {
+    const t0 = audioCtx.currentTime + delay;
+    [523.25, 786].forEach(function (freq, i) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.07 / (i + 1), t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.1);
+    });
+  }
+  function chime(count) {
+    if (!audioCtx) return;
+    for (let i = 0; i < count; i++) bell(i * 1.2, count === 3 ? 3.5 : 2.2);
+  }
+
+  // ---------- Guided trataka sessions ----------
+  // Traditional practice alternates: soft gaze at the flame, then eyes
+  // closed holding the afterimage. Kept under 10 minutes total.
+  const SESSIONS = {
+    3:  [['gaze', 120], ['closed', 60]],
+    5:  [['gaze', 180], ['closed', 120]],
+    10: [['gaze', 180], ['closed', 120], ['gaze', 180], ['closed', 120]]
+  };
+  const TIMER_OPTIONS = [null, 3, 5, 10];
+  const TIMER_LABELS = ['◯', '3m', '5m', '10m'];
+  let timerIdx = 0;
+  let session = null;
+
+  function startSession(minutes) {
+    session = {
+      phases: SESSIONS[minutes],
+      idx: 0,
+      remaining: SESSIONS[minutes][0][1]
+    };
+    canvas.style.opacity = '1';
+    statusEl.textContent =
+      '1 chime: close your eyes · 2 chimes: gaze again · 3 chimes: session complete';
+  }
+
+  function stopSession() {
+    session = null;
+    canvas.style.opacity = '1';
+    statusEl.textContent = '';
+  }
+
+  btnTimer.addEventListener('click', function () {
+    ensureAudio(); // unlock audio inside the user gesture
+    timerIdx = (timerIdx + 1) % TIMER_OPTIONS.length;
+    btnTimer.textContent = TIMER_LABELS[timerIdx];
+    if (TIMER_OPTIONS[timerIdx] === null) {
+      stopSession();
+    } else {
+      startSession(TIMER_OPTIONS[timerIdx]);
+    }
+  });
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function updateSession(dt) {
+    if (!session) return;
+    session.remaining -= dt;
+
+    const phase = session.phases[session.idx][0];
+    if (session.remaining <= 0) {
+      session.idx++;
+      if (session.idx >= session.phases.length) {
+        chime(3);
+        stopSession();
+        timerIdx = 0;
+        btnTimer.textContent = TIMER_LABELS[0];
+        statusEl.textContent = 'Session complete';
+        return;
+      }
+      const next = session.phases[session.idx];
+      session.remaining = next[1];
+      if (next[0] === 'closed') {
+        chime(1);
+        canvas.style.opacity = '0'; // darkness supports the afterimage
+      } else {
+        chime(2);
+        canvas.style.opacity = '1';
+      }
+      return;
+    }
+
+    // Countdown display (only visible while the UI is awake)
+    if (session.remaining < session.phases[session.idx][1] - 8 || session.idx > 0) {
+      statusEl.textContent = (phase === 'gaze'
+        ? 'Gaze softly at the flame · '
+        : 'Eyes closed · hold the afterimage · ') + fmt(session.remaining);
+    }
+  }
+
+  // ================= Engine 3: particle flame =================
+  // A tight column of glowing particles with slow sway and gentle flicker.
+  const engine3 = (function () {
+    const MAX_PARTICLES = 140;
+    const SPAWN_PER_SEC = 180;
+    let particles = [];
+    let spawnAcc = 0;
+    let sway = 0;
+
+    function reset() {
+      particles = [];
+      spawnAcc = 0;
+      sway = 0;
+      fctx.clearRect(0, 0, W || window.innerWidth, H || window.innerHeight);
+    }
+
+    function spawn(count) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          // Only a hint of sway at birth: the white-hot base stays anchored
+          x: baseX + (Math.random() - 0.5) * 20 * scale + sway * 0.25,
+          y: baseY + (Math.random() - 0.5) * 6 * scale,
+          vx: (Math.random() - 0.5) * 0.1 * scale,
+          vy: -(1.0 + Math.random() * 1.2) * scale,
+          r: (7 + Math.random() * 11) * scale,     // starting radius
+          life: 0,
+          maxLife: 0.9 + Math.random() * 0.7,      // seconds
+          flicker: Math.random() * Math.PI * 2
+        });
+      }
+    }
+
+    // Color ramp: white-hot core -> yellow -> orange -> deep red -> gone
+    function colorFor(k) {
+      // k = 0 (born) .. 1 (dead). Births fade in gradually so the base reads
+      // as a steady glow, not a boil of popping bubbles
+      const fi = k < 0.22 ? k / 0.22 : 1;
+      if (k < 0.12) return 'rgba(255,255,235,' + (0.55 * (1 - k) * fi) + ')';
+      if (k < 0.35) return 'rgba(255,215,110,' + (0.5 * (1 - k) * fi) + ')';
+      if (k < 0.65) return 'rgba(255,130,30,'  + (0.42 * (1 - k)) + ')';
+      return 'rgba(200,40,10,' + (0.3 * (1 - k)) + ')';
+    }
+
+    // One layer of firelight: a radial glow with a smooth gaussian falloff,
+    // so the light dies out gradually with no visible edge or banding
+    function drawGlow(cx, cy, r, stretchY, rgb, peak) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(1, stretchY);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      for (let i = 0; i <= 8; i++) {
+        const s = i / 8;
+        const a = peak * Math.exp(-5 * s * s) * (1 - s);
+        g.addColorStop(s, 'rgba(' + rgb + ',' + a.toFixed(4) + ')');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function step(dt, t) {
+      const f = dt * 60;   // motion factor so speed is the same on any monitor
+
+      sway = Math.sin(t * 0.5) * 3 * scale + Math.sin(t * 1.3) * 1.2 * scale;
+
+      // Flame layer: fade the previous frame toward transparent for soft trails
+      fctx.globalCompositeOperation = 'destination-out';
+      fctx.fillStyle = 'rgba(0, 0, 0, ' + Math.min(1, 1 - Math.exp(-20 * dt)).toFixed(3) + ')';
+      fctx.fillRect(0, 0, W, H);
+
+      if (particles.length < MAX_PARTICLES) {
+        spawnAcc += SPAWN_PER_SEC * dt;
+        const n = Math.floor(spawnAcc);
+        if (n > 0) {
+          spawnAcc -= n;
+          spawn(n);
+        }
+      }
+
+      // Additive blending makes overlapping puffs glow like real fire
+      fctx.globalCompositeOperation = 'lighter';
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life += dt;
+        const k = p.life / p.maxLife;
+
+        if (k >= 1) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        // Wander: soft horizontal flicker plus a pull back toward center.
+        // The flicker force ramps up with age, so the white-hot base barely
+        // moves while the upper flame keeps its dance
+        p.flicker += 0.15 * f;
+        p.vx += Math.sin(p.flicker) * 0.02 * scale * f * Math.min(1, k * 2.2);
+        p.vx += (baseX - p.x) * 0.002 * f;      // keeps the flame cohesive
+        p.vy -= 0.010 * scale * f;              // hot air accelerates upward
+        p.x += p.vx * f;
+        p.y += p.vy * f;
+
+        const r = p.r * (1 - k * 0.85);          // shrink as it cools
+        if (r <= 0.4) continue;
+
+        const grad = fctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        grad.addColorStop(0, colorFor(k));
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        fctx.fillStyle = grad;
+        fctx.beginPath();
+        fctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        fctx.fill();
+      }
+
+      // A rare, tiny spark drifting up — kept sparse so the gaze can settle
+      if (Math.random() < 0.02 * f) {
+        particles.push({
+          x: baseX + (Math.random() - 0.5) * 16 * scale,
+          y: baseY - 10 * scale,
+          vx: (Math.random() - 0.5) * 0.5 * scale,
+          vy: -(1.8 + Math.random() * 1.2) * scale,
+          r: 1.6 * scale,
+          life: 0,
+          maxLife: 1.2 + Math.random() * 0.8,
+          flicker: Math.random() * Math.PI * 2
+        });
+      }
+
+      // ---- Compose the final image: black night, firelight, then the flame
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      // The aura breathes slowly and leans with the flame — calm, not flashing
+      const glowPulse = 1 + 0.05 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.3 + 1.2);
+      const ax = baseX + sway * 0.7;
+      const ay = baseY - 55 * scale;
+
+      // Wide ambient light the fire throws into the darkness
+      drawGlow(ax, ay, 320 * scale, 1.15, '255,120,35', 0.16 * glowPulse);
+      // Warm halo wrapping the flame body
+      drawGlow(ax, ay + 6 * scale, 140 * scale, 1.3, '255,150,60', 0.30 * glowPulse);
+      // Soft bloom right around the flame itself
+      drawGlow(ax, ay + 10 * scale, 62 * scale, 1.35, '255,200,120', 0.26 * glowPulse);
+
+      ctx.drawImage(fireLayer, 0, 0, W, H);
+
+      // Steady white-hot heart at the base: a solid, gently breathing anchor
+      // for the gaze — the particles above it provide the dance
+      const coreBreath = 1 + 0.04 * Math.sin(t * 1.7) + 0.02 * Math.sin(t * 3.7 + 0.8);
+      drawGlow(baseX, baseY - 16 * scale, 30 * scale * coreBreath, 1.55, '255,235,200', 0.9);
+      drawGlow(baseX, baseY - 10 * scale, 46 * scale * coreBreath, 1.35, '255,190,110', 0.5);
+    }
+
+    return { baseYOffset: 70, reset: reset, step: step };
+  })();
+
+  // ================= Engine 2.1: candle flame =================
+  // Trataka needs a steady flame (a real candle in a draft-free room), so
+  // the flame is a stable teardrop that breathes, leans and wiggles like a
+  // candle flame — pure fire only: no wick, no candle, bright to the core.
+  const engine21 = (function () {
+    let flickerE = 0;                 // energy of the current flicker event
+    let nextFlicker = 4;              // seconds until the next one
+
+    function reset() {
+      flickerE = 0;
+      nextFlicker = 4;
+    }
+
+    function flamePath(cx, cy, w, h, tipX) {
+      ctx.beginPath();
+      ctx.moveTo(cx - w / 2, cy);
+      ctx.bezierCurveTo(
+        cx - w / 2, cy - h * 0.55,
+        cx + tipX - w * 0.12, cy - h * 0.82,
+        cx + tipX, cy - h
+      );
+      ctx.bezierCurveTo(
+        cx + tipX + w * 0.12, cy - h * 0.82,
+        cx + w / 2, cy - h * 0.55,
+        cx + w / 2, cy
+      );
+      ctx.quadraticCurveTo(cx, cy + w * 0.5, cx - w / 2, cy);
+      ctx.closePath();
+    }
+
+    function layerGradient(cy, h, stops) {
+      const g = ctx.createLinearGradient(0, cy + 4, 0, cy - h);
+      stops.forEach(function (s) { g.addColorStop(s[0], s[1]); });
+      return g;
+    }
+
+    function step(dt, t) {
+      // Flicker events: brief agitation every couple of seconds, decaying
+      // quickly — a little more often than Fire2, like a candle in a room
+      // where the air isn't perfectly still
+      nextFlicker -= dt;
+      if (nextFlicker <= 0) {
+        flickerE = 0.7 + Math.random() * 0.3;
+        nextFlicker = 2 + Math.random() * 4;
+      }
+      flickerE *= Math.exp(-dt * 3);
+
+      // Livelier lean + breathing, plus a constant soft wiggle at the tip
+      const lean =
+        0.60 * Math.sin(t * 0.6) +
+        0.45 * Math.sin(t * 1.27 + 1.7) +
+        0.35 * Math.sin(t * 2.09 + 4.2);
+      const breath = 1 + 0.05 * Math.sin(t * 0.8) + 0.03 * Math.sin(t * 1.9 + 1);
+      const jitter = flickerE * Math.sin(t * 25) * 3.5 * scale
+        + Math.sin(t * 4.3 + 0.7) * 1.5 * scale;
+      const stretch = 1 + 0.11 * flickerE * Math.sin(t * 17);
+
+      const h = 130 * scale * breath * stretch;
+      const w = 44 * scale * (2 - breath * stretch * 0.98);
+      const tipX = lean * 7 * scale + jitter;
+
+      // Solid black each frame — smooth shapes need no motion trails
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      // Ambient halo — also washes warm light over the candle top
+      const haloY = baseY - h * 0.45;
+      const halo = ctx.createRadialGradient(baseX, haloY, 0, baseX, haloY, h * 1.5);
+      halo.addColorStop(0, 'rgba(255, 130, 40, 0.16)');
+      halo.addColorStop(0.5, 'rgba(255, 80, 20, 0.06)');
+      halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(baseX, haloY, h * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft edges so the layers blend like glowing gas, not cut-out shapes
+      ctx.filter = 'blur(' + (4 * scale) + 'px)';
+
+      // Outer flame — warm orange envelope
+      ctx.fillStyle = layerGradient(baseY, h, [
+        [0, 'rgba(255, 80, 10, 0.32)'],
+        [0.55, 'rgba(255, 140, 30, 0.5)'],
+        [1, 'rgba(255, 180, 60, 0.08)']
+      ]);
+      flamePath(baseX, baseY, w, h, tipX);
+      ctx.fill();
+
+      // Mid flame — bright yellow body
+      ctx.fillStyle = layerGradient(baseY - 4 * scale, h * 0.72, [
+        [0, 'rgba(255, 180, 60, 0.45)'],
+        [0.65, 'rgba(255, 220, 120, 0.75)'],
+        [1, 'rgba(255, 200, 80, 0.15)']
+      ]);
+      flamePath(baseX, baseY - 4 * scale, w * 0.64, h * 0.72,
+        tipX * 0.75 + Math.sin(t * 3.1) * 1.2 * scale);
+      ctx.fill();
+
+      // Core — white-hot, compact: this is what leaves the afterimage
+      ctx.fillStyle = layerGradient(baseY - 8 * scale, h * 0.45, [
+        [0, 'rgba(255, 240, 200, 0.9)'],
+        [1, 'rgba(255, 255, 240, 0.25)']
+      ]);
+      flamePath(baseX, baseY - 8 * scale, w * 0.34, h * 0.45, tipX * 0.5);
+      ctx.fill();
+
+      ctx.filter = 'none';
+
+      // Faint blue combustion tinge at the base — barely there, the way it
+      // reads on a real flame seen in the dark
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.scale(1, 0.5);
+      const blue = ctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.5);
+      blue.addColorStop(0, 'rgba(70, 110, 255, 0.03)');
+      blue.addColorStop(0.55, 'rgba(90, 130, 255, 0.10)');
+      blue.addColorStop(0.8, 'rgba(120, 150, 255, 0.04)');
+      blue.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = blue;
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    return { baseYOffset: 65, reset: reset, step: step };
+  })();
+
+  const engines = { '3': engine3, '2.1': engine21 };
+
+  // ---------- Main loop ----------
+  let t = 0;
+  let last = performance.now();
+
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.066);
+    last = now;
+    t += dt;
+
+    updateSession(dt);
+    engines[version].step(dt, t);
+
+    requestAnimationFrame(frame);
+  }
+
+  // Start on solid black
+  resize();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  requestAnimationFrame(frame);
+
+  // ---------- PWA install (service worker) ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
