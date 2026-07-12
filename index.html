@@ -622,14 +622,26 @@
     let flickerE = 0;                 // energy of the current flicker event
     let nextFlicker = 4;              // seconds until the next one
 
-    // iPhone Safari and many phone WebViews ignore canvas filter, which
-    // this flame's soft edges depend on — without a fallback the layers
-    // render as hard-edged cutouts instead of glowing gas
+    // iPhone Safari and many phone WebViews don't apply canvas filter,
+    // which this flame's soft edges depend on — without a fallback the
+    // layers render as hard-edged cutouts instead of glowing gas.
+    // Some browsers accept the filter value without rendering it, so
+    // test with real pixels: draw a blurred dot and check that color
+    // actually bled beyond the dot's own edge.
     const filterSupported = (function () {
-      const c = document.createElement('canvas').getContext('2d');
-      if (!c) return false;
-      try { c.filter = 'blur(2px)'; } catch (e) { return false; }
-      return c.filter === 'blur(2px)';
+      const c = document.createElement('canvas');
+      c.width = 16;
+      c.height = 16;
+      const g = c.getContext('2d');
+      if (!g) return false;
+      try { g.filter = 'blur(2px)'; } catch (e) { return false; }
+      g.fillStyle = '#fff';
+      g.fillRect(7, 7, 2, 2);
+      try {
+        return g.getImageData(7, 4, 1, 1).data[3] > 0;
+      } catch (e) {
+        return g.filter === 'blur(2px)';
+      }
     })();
 
     // Fallback blur: draw the flame small, then upscale twice — each
